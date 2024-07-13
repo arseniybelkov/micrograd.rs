@@ -1,65 +1,91 @@
-use std::ops::{Add, Sub, Neg, Mul, Div};
+use crate::differentiable::Differentiable;
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
-pub struct Value<T> {
+#[derive(Clone)]
+pub struct Value<T: Differentiable> {
     data: T,
-    grad: Option<T>,
+    grad: T,
 }
 
-impl<T> Value<T> {
+impl<T: Differentiable> Value<T> {
     pub fn new(data: T) -> Self {
-        Self { data , grad: None}
+        Self {
+            data,
+            grad: T::zero_grad(),
+        }
     }
 
-    pub fn grad(&self) -> Option<&T> {
-        self.grad.as_ref()
+    pub fn grad(&self) -> &T {
+        &self.grad
+    }
+
+    pub fn zero_grad(&mut self) {
+        self.grad = T::zero_grad();
     }
 }
 
-impl<T> Add<T> for Value<T>
-where T: Add<T, Output=T>
+impl<T, R, O> Add<R> for Value<T>
+where
+    T: Add<R, Output = O> + Differentiable,
+    O: Differentiable,
+{
+    type Output = Value<O>;
+    fn add(self, rhs: R) -> Self::Output {
+        Value::new(self.data + rhs)
+    }
+}
+
+impl<T, R, O> Sub<R> for Value<T>
+where
+    T: Sub<R, Output = O> + Differentiable,
+    O: Differentiable,
+{
+    type Output = Value<O>;
+    fn sub(self, rhs: R) -> Self::Output {
+        Value::new(self.data - rhs)
+    }
+}
+
+impl<T, R, O> Mul<R> for Value<T>
+where
+    T: Mul<R, Output = O> + Differentiable + Clone,
+    R: Clone,
+    O: Differentiable,
+{
+    type Output = Value<O>;
+    fn mul(self, rhs: R) -> Self::Output {
+        let data: O = self.data * rhs.clone();
+        let grad: O = self.grad * rhs;
+        let mut value = Value::new(data);
+        value.grad = grad;
+        value
+    }
+}
+
+impl<T, R, O> Div<R> for Value<T>
+where
+    T: Div<R, Output = O> + Differentiable + Clone,
+    R: Clone,
+    O: Differentiable,
+{
+    type Output = Value<O>;
+    fn div(mut self, rhs: R) -> Self::Output {
+        let data = self.data / rhs.clone();
+        let grad = self.grad / rhs;
+        let mut value = Value::new(data);
+        value.grad = grad;
+        value
+    }
+}
+
+impl<T> Neg for Value<T>
+where
+    T: Neg<Output = T> + Differentiable,
 {
     type Output = Self;
-    fn add(self, rhs: T) -> Self::Output {
-        let mut this = Self::new(self.data + rhs);
-        this
-    }
-}
-
-impl<T> Sub<T> for Value<T>
-where T: Sub<T, Output=T>
-{
-    type Output = Self;
-    fn sub(self, rhs: T) -> Self::Output {
-        let mut this = Self::new(self.data - rhs);
-        this
-    }
-}
-
-impl<T> Mul<T> for Value<T>
-where T: Mul<T, Output=T>
-{
-    type Output = Self;
-    fn mul(self, rhs: T) -> Self::Output {
-        let mut this = Self::new(self.data * rhs);
-        this
-    }
-}
-
-impl<T> Div<T> for Value<T>
-where T: Div<T, Output=T>
-{
-    type Output = Self;
-    fn div(self, rhs: T) -> Self::Output {
-        let mut this = Self::new(self.data / rhs);
-        this
-    }
-}
-
-impl<T: Neg<Output=T>> Neg for Value<T> {
-    type Output = Self;
-    fn neg(self) -> Self::Output {
-        let mut this = self;
-        this.data = -this.data;
-        this
+    fn neg(mut self) -> Self::Output {
+        self.data = -self.data;
+        self.grad = -self.grad;
+        self
     }
 }
