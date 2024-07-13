@@ -48,14 +48,14 @@ where
 
 impl<T, R, O> Mul<R> for Value<T>
 where
-    T: Mul<R, Output = O> + Differentiable + Clone,
+    T: Mul<R, Output = O> + Differentiable,
     R: Clone,
     O: Differentiable,
 {
     type Output = Value<O>;
     fn mul(self, rhs: R) -> Self::Output {
-        let data: O = self.data * rhs.clone();
-        let grad: O = self.grad * rhs;
+        let data = self.data * rhs.clone();
+        let grad = self.grad * rhs;
         let mut value = Value::new(data);
         value.grad = grad;
         value
@@ -64,7 +64,7 @@ where
 
 impl<T, R, O> Div<R> for Value<T>
 where
-    T: Div<R, Output = O> + Differentiable + Clone,
+    T: Div<R, Output = O> + Differentiable,
     R: Clone,
     O: Differentiable,
 {
