@@ -5,7 +5,7 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 #[derive(Clone)]
 enum Operation<'a, T: Differentiable + Copy> {
     Add(&'a Value<'a, T>, &'a Value<'a, T>),
-    // Sub(&'a Value<'a, T>, &'a Value<'a, T>),
+    Sub(&'a Value<'a, T>, &'a Value<'a, T>),
     Mul(&'a Value<'a, T>, &'a Value<'a, T>),
     // Div(Rc<ValueInternal<T>>, Rc<ValueInternal<T>>),
     // Neg,
@@ -45,15 +45,20 @@ impl<'a, T: Differentiable + Copy> Value<'a, T> {
             Some(op) => {
                 let (v1, v2) = match op {
                     Operation::Add(v1, v2) => {
-                        v1.grad.set(v1.grad.get() + T::eye_grad() * grad);
-                        v2.grad.set(v2.grad.get() + T::eye_grad() * grad);
+                        v1.grad.set(v1.grad() + T::eye_grad() * grad);
+                        v2.grad.set(v2.grad() + T::eye_grad() * grad);
                         (v1, v2)
-                    },
+                    }
                     Operation::Mul(v1, v2) => {
-                        v1.grad.set(v1.grad.get() + v2.data.get() * grad);
-                        v2.grad.set(v2.grad.get() + v1.data.get() * grad);
+                        v1.grad.set(v1.grad() + v2.data.get() * grad);
+                        v2.grad.set(v2.grad() + v1.data.get() * grad);
                         (v1, v2)
-                    },
+                    }
+                    Operation::Sub(v1, v2) => {
+                        v1.grad.set(v1.grad() + T::eye_grad() * grad);
+                        v2.grad.set(v2.grad() - T::eye_grad() * grad);
+                        (v1, v2)
+                    }
                 };
 
                 v1._backward(v1.grad());
@@ -78,20 +83,17 @@ where
     }
 }
 
-// impl<T> Sub<&Value<T>> for &Value<T>
-// where
-//     T: Sub<T, Output = T> + Differentiable + Copy,
-// {
-//     type Output = Value<T>;
-//     fn sub(self, rhs: &Value<T>) -> Self::Output {
-//         let internal = ValueInternal {
-//             data: Cell::new(self.0.data.get() - rhs.0.data.get()),
-//             grad: Cell::new(T::zero_grad()),
-//             operation: Some(Operation::Sub(self.0.clone(), rhs.0.clone())),
-//         };
-//         Value::from_internal(internal)
-//     }
-// }
+impl<'a, T> Sub<&'a Value<'a, T>> for &'a Value<'a, T>
+where
+    T: Sub<T, Output = T> + Differentiable + Copy,
+{
+    type Output = Value<'a, T>;
+    fn sub(self, rhs: &'a Value<'a, T>) -> Self::Output {
+        let mut value = Value::new(self.data.get() - rhs.data.get());
+        value.operation = Some(Operation::Sub(self, rhs));
+        value
+    }
+}
 
 // impl<T> Sub<Value<T>> for T
 // where

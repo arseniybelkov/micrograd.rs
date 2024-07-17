@@ -1,5 +1,5 @@
-use pretty_assertions::assert_eq;
 use micrograd::Value;
+use pretty_assertions::assert_eq;
 
 #[test]
 fn test_simple() {
@@ -14,7 +14,7 @@ fn test_simple() {
     let w3 = Value::new(3f32);
 
     let w = &w1 + &w2;
-    let result =  &w * &w3;
+    let result = &w * &w3;
     result.backward();
 
     assert_eq!(w1.grad(), 3f32);
@@ -24,7 +24,7 @@ fn test_simple() {
 
 #[cfg(test)]
 mod operations {
-    use super::{Value, assert_eq};
+    use super::{assert_eq, Value};
 
     #[test]
     fn test_add() {
@@ -54,6 +54,30 @@ mod operations {
     }
 
     #[test]
+    fn test_sub() {
+        let x = Value::new(1f32);
+        let y = Value::new(2f32);
+        (&x - &y).backward();
+        assert_eq!(x.grad(), 1f32);
+        assert_eq!(y.grad(), -1f32);
+
+        let z = Value::new(5f32);
+        (&x - &z).backward();
+        assert_eq!(x.grad(), 2f32);
+        assert_eq!(y.grad(), -1f32);
+        assert_eq!(z.grad(), -1f32);
+
+        x.zero_grad();
+        y.zero_grad();
+
+        let x = Value::new(13f32);
+        let z = &x - &y;
+        (&z - &x).backward();
+
+        assert_eq!(x.grad(), 0f32);
+    }
+
+    #[test]
     fn test_mul() {
         let x = Value::new(1f32);
         let y = Value::new(2f32);
@@ -75,5 +99,9 @@ mod operations {
         (&z * &x).backward();
 
         assert_eq!(x.grad(), 52f32);
+
+        let x = Value::new(4f32);
+        (&x * &x).backward();
+        assert_eq!(x.grad(), 8f32);
     }
 }
