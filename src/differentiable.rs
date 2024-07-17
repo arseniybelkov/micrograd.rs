@@ -1,6 +1,13 @@
-use std::ops::{Add, Mul};
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
-pub trait Differentiable: Add<Output = Self> + Mul<Output = Self> + Sized {
+pub trait Differentiable:
+    Add<Output = Self>
+    + Sub<Output = Self>
+    + Mul<Output = Self>
+    + Div<Output = Self>
+    + Neg<Output = Self>
+    + Sized
+{
     fn zero_grad() -> Self;
     fn eye_grad() -> Self;
 }
