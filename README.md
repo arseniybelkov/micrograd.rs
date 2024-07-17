@@ -1,5 +1,5 @@
 # micrograd.rs
-Insanely lightweight Rust implementation of Andrej Karpathy's [micrograd](https://github.com/arseniybelkov/micrograd.rs). 
+Insanely lightweight Rust implementation of Andrej Karpathy's [micrograd](https://github.com/karpathy/micrograd). 
 ## Example 
 ```rust
 use micrograd::Value;
