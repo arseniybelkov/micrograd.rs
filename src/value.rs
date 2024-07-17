@@ -8,7 +8,7 @@ enum Operation<'a, T: Differentiable + Copy> {
     Sub(&'a Value<'a, T>, &'a Value<'a, T>),
     Mul(&'a Value<'a, T>, &'a Value<'a, T>),
     Div(&'a Value<'a, T>, &'a Value<'a, T>),
-    // Neg,
+    Neg(&'a Value<'a, T>),
 }
 
 #[derive(Clone)]
@@ -42,39 +42,43 @@ impl<'a, T: Differentiable + Copy> Value<'a, T> {
 
     fn _backward(&self, grad: T) {
         match &self.operation {
-            Some(op) => {
-                let (v1, v2) = match op {
-                    Operation::Add(v1, v2) => {
-                        v1.grad.set(v1.grad() + T::eye_grad() * grad);
-                        v2.grad.set(v2.grad() + T::eye_grad() * grad);
-                        (v1, v2)
-                    }
-                    Operation::Mul(v1, v2) => {
-                        v1.grad.set(v1.grad() + v2.data.get() * grad);
-                        v2.grad.set(v2.grad() + v1.data.get() * grad);
-                        (v1, v2)
-                    }
-                    Operation::Sub(v1, v2) => {
-                        v1.grad.set(v1.grad() + T::eye_grad() * grad);
-                        v2.grad.set(v2.grad() - T::eye_grad() * grad);
-                        (v1, v2)
-                    },
-                    Operation::Div(v1, v2) => {
-                        let d2 = v2.data.get();
-                        v1.grad.set(v1.grad() + T::eye_grad() / d2 * grad);
-                        v2.grad.set(v2.grad() - v1.data.get() / (d2 * d2) * grad);
-                        (v1, v2)
-                    }
-                };
-
-                v1._backward(v1.grad());
-                v2._backward(v2.grad());
-            }
+            Some(op) => match op {
+                Operation::Add(v1, v2) => {
+                    v1.grad.set(v1.grad() + T::eye_grad() * grad);
+                    v2.grad.set(v2.grad() + T::eye_grad() * grad);
+                    backward(v1, v2)
+                }
+                Operation::Mul(v1, v2) => {
+                    v1.grad.set(v1.grad() + v2.data.get() * grad);
+                    v2.grad.set(v2.grad() + v1.data.get() * grad);
+                    backward(v1, v2)
+                }
+                Operation::Sub(v1, v2) => {
+                    v1.grad.set(v1.grad() + T::eye_grad() * grad);
+                    v2.grad.set(v2.grad() - T::eye_grad() * grad);
+                    backward(v1, v2)
+                }
+                Operation::Div(v1, v2) => {
+                    let d2 = v2.data.get();
+                    v1.grad.set(v1.grad() + T::eye_grad() / d2 * grad);
+                    v2.grad.set(v2.grad() - v1.data.get() / (d2 * d2) * grad);
+                    backward(v1, v2)
+                }
+                Operation::Neg(v) => {
+                    v.grad.set(v.grad() - T::eye_grad() * grad);
+                    v._backward(v.grad());
+                }
+            },
             None => {
                 // end of graph
             }
         }
     }
+}
+
+fn backward<'a, T: Differentiable + Copy>(v1: &'a Value<T>, v2: &'a Value<T>) {
+    v1._backward(v1.grad());
+    v2._backward(v2.grad());
 }
 
 impl<'a, T> Add<&'a Value<'a, T>> for &'a Value<'a, T>
@@ -125,14 +129,14 @@ where
     }
 }
 
-// impl<T> Neg for &Value<T>
-// where
-//     T: Neg<Output = T> + Differentiable + Copy,
-// {
-//     type Output = Value<T>;
-//     fn neg(self) -> Self::Output {
-//         let mut value = Value::new(-self.data.get());
-//         value.operation = Some(Operation::Neg(self.data.clone()));
-//         value
-//     }
-// }
+impl<'a, T> Neg for &'a Value<'a, T>
+where
+    T: Neg<Output = T> + Differentiable + Copy,
+{
+    type Output = Value<'a, T>;
+    fn neg(self) -> Self::Output {
+        let mut value = Value::new(-self.data.get());
+        value.operation = Some(Operation::Neg(self));
+        value
+    }
+}

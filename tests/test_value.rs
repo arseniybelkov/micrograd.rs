@@ -132,4 +132,12 @@ mod operations {
         (&x / &x).backward();
         assert_eq!(x.grad(), 0f32);
     }
+
+    #[test]
+    fn test_neg() {
+        let x = Value::new(123f32);
+        let y = -&x;
+        y.backward();
+        assert_eq!(x.grad(), -1f32);
+    }
 }
