@@ -104,4 +104,32 @@ mod operations {
         (&x * &x).backward();
         assert_eq!(x.grad(), 8f32);
     }
+
+    #[test]
+    fn test_div() {
+        let x = Value::new(3f32);
+        let y = Value::new(2f32);
+        (&x / &y).backward();
+        assert_eq!(x.grad(), 0.5);
+        assert_eq!(y.grad(), -0.75);
+
+        let z = Value::new(5f32);
+        (&x / &z).backward();
+        assert_eq!(x.grad(), 0.7);
+        assert_eq!(y.grad(), -0.75);
+        assert_eq!(z.grad(), -0.12);
+
+        x.zero_grad();
+        y.zero_grad();
+
+        let x = Value::new(13f32);
+        let z = &x / &y;
+        (&z / &x).backward();
+
+        assert_eq!(x.grad(), 0f32);
+
+        let x = Value::new(4f32);
+        (&x / &x).backward();
+        assert_eq!(x.grad(), 0f32);
+    }
 }

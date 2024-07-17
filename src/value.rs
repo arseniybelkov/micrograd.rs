@@ -7,7 +7,7 @@ enum Operation<'a, T: Differentiable + Copy> {
     Add(&'a Value<'a, T>, &'a Value<'a, T>),
     Sub(&'a Value<'a, T>, &'a Value<'a, T>),
     Mul(&'a Value<'a, T>, &'a Value<'a, T>),
-    // Div(Rc<ValueInternal<T>>, Rc<ValueInternal<T>>),
+    Div(&'a Value<'a, T>, &'a Value<'a, T>),
     // Neg,
 }
 
@@ -58,6 +58,12 @@ impl<'a, T: Differentiable + Copy> Value<'a, T> {
                         v1.grad.set(v1.grad() + T::eye_grad() * grad);
                         v2.grad.set(v2.grad() - T::eye_grad() * grad);
                         (v1, v2)
+                    },
+                    Operation::Div(v1, v2) => {
+                        let d2 = v2.data.get();
+                        v1.grad.set(v1.grad() + T::eye_grad() / d2 * grad);
+                        v2.grad.set(v2.grad() - v1.data.get() / (d2 * d2) * grad);
+                        (v1, v2)
                     }
                 };
 
@@ -95,32 +101,6 @@ where
     }
 }
 
-// impl<T> Sub<Value<T>> for T
-// where
-//     T: Sub<T, Output = T> + Differentiable + Copy,
-// {
-//     type Output = Value<T>;
-//     fn sub(self, rhs: Value<T>) -> Self::Output {
-//         let data = self - rhs.data;
-//         let grad = T::zero_grad() - rhs.grad;
-//         let mut value = Value::new(data);
-//         value.grad = grad;
-//         value
-//     }
-// }
-
-// impl<T> Mul<T> for &Value<T>
-// where
-//     T: Mul<T, Output = T> + Differentiable + Copy,
-// {
-//     type Output = Value<T, Rc<Cell<T>>, T>;
-//     fn mul(self, rhs: T) -> Self::Output {
-//         let mut value = Value::new(self.data.get() * rhs);
-//         value.operation = Some(Operation::Mul(self.data.clone(), rhs));
-//         value
-//     }
-// }
-
 impl<'a, T> Mul<&'a Value<'a, T>> for &'a Value<'a, T>
 where
     T: Mul<T, Output = T> + Differentiable + Copy,
@@ -133,29 +113,17 @@ where
     }
 }
 
-// impl<T> Div<T> for &Value<T>
-// where
-//     T: Div<T, Output = T> + Differentiable + Copy,
-// {
-//     type Output = Value<T, Rc<Cell<T>>, T>;
-//     fn div(self, rhs: T) -> Self::Output {
-//         let mut value = Value::new(self.data.get() / rhs);
-//         value.operation = Some(Operation::Div(self.data.clone(), rhs));
-//         value
-//     }
-// }
-
-// impl<T> Div<&Value<T>> for &Value<T>
-// where
-//     T: Div<T, Output = T> + Differentiable + Copy,
-// {
-//     type Output = Value<T>;
-//     fn div(self, rhs: &Value<T>) -> Self::Output {
-//         let mut value = Value::new(self.data.get() / self.data.get());
-//         value.operation = Some(Operation::Div(self.data.clone(), rhs.data.clone()));
-//         value
-//     }
-// }
+impl<'a, T> Div<&'a Value<'a, T>> for &'a Value<'a, T>
+where
+    T: Div<T, Output = T> + Differentiable + Copy,
+{
+    type Output = Value<'a, T>;
+    fn div(self, rhs: &'a Value<'a, T>) -> Self::Output {
+        let mut value = Value::new(self.data.get() / rhs.data.get());
+        value.operation = Some(Operation::Div(self, rhs));
+        value
+    }
+}
 
 // impl<T> Neg for &Value<T>
 // where
