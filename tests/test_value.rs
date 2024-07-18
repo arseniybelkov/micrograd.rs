@@ -22,6 +22,23 @@ fn test_simple() {
     assert_eq!(w3.grad(), 9f32);
 }
 
+#[test]
+fn test_deep() {
+    let x = Value::new(5f32);
+    let y = Value::new(4f32);
+    let z = Value::new(8f32);
+
+    let a = &y + &x;
+    let b = &z * &a;
+    let c = &b * &b;
+    let r = &c - &z;
+
+    r.backward();
+    assert_eq!(x.grad(), 1152f32);
+    assert_eq!(y.grad(), 1152f32);
+    assert_eq!(z.grad(), 1295f32);
+}
+
 #[cfg(test)]
 mod operations {
     use super::{assert_eq, Value};
