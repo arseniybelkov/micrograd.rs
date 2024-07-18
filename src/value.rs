@@ -46,23 +46,23 @@ impl<'a, T: Differentiable + Copy> Value<'a, T> {
                 Operation::Add(v1, v2) => {
                     v1.grad.set(v1.grad() + T::eye_grad() * grad);
                     v2.grad.set(v2.grad() + T::eye_grad() * grad);
-                    backward(v1, v2)
+                    pair_backward(v1, v2)
                 }
                 Operation::Mul(v1, v2) => {
                     v1.grad.set(v1.grad() + v2.data.get() * grad);
                     v2.grad.set(v2.grad() + v1.data.get() * grad);
-                    backward(v1, v2)
+                    pair_backward(v1, v2)
                 }
                 Operation::Sub(v1, v2) => {
                     v1.grad.set(v1.grad() + T::eye_grad() * grad);
                     v2.grad.set(v2.grad() - T::eye_grad() * grad);
-                    backward(v1, v2)
+                    pair_backward(v1, v2)
                 }
                 Operation::Div(v1, v2) => {
                     let d2 = v2.data.get();
                     v1.grad.set(v1.grad() + T::eye_grad() / d2 * grad);
                     v2.grad.set(v2.grad() - v1.data.get() / (d2 * d2) * grad);
-                    backward(v1, v2)
+                    pair_backward(v1, v2)
                 }
                 Operation::Neg(v) => {
                     v.grad.set(v.grad() - T::eye_grad() * grad);
@@ -76,9 +76,11 @@ impl<'a, T: Differentiable + Copy> Value<'a, T> {
     }
 }
 
-fn backward<'a, T: Differentiable + Copy>(v1: &'a Value<T>, v2: &'a Value<T>) {
+fn pair_backward<'a, T: Differentiable + Copy>(v1: &'a Value<T>, v2: &'a Value<T>) {
     v1._backward(v1.grad());
-    v2._backward(v2.grad());
+    if !std::ptr::eq(v1, v2) {
+        v2._backward(v2.grad());
+    }
 }
 
 impl<'a, T> Add<&'a Value<'a, T>> for &'a Value<'a, T>
