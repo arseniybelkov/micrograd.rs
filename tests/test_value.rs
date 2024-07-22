@@ -24,19 +24,22 @@ fn test_simple() {
 
 #[test]
 fn test_deep() {
-    let x = Value::new(5f32);
-    let y = Value::new(4f32);
-    let z = Value::new(8f32);
+    let x = Value::new(5f64);
+    let y = Value::new(4f64);
+    let z = Value::new(8f64);
 
     let a = &y + &x;
     let b = &z * &a;
     let c = &b * &b;
-    let r = &c - &z;
+    let d = &c - &z;
+    let e = &z * &d;
+    let f = &e + &e;
+    let result = &f / &x;
 
-    r.backward();
-    assert_eq!(x.grad(), 1152f32);
-    assert_eq!(y.grad(), 1152f32);
-    assert_eq!(z.grad(), 1295f32);
+    result.backward();
+    assert!(f64::abs(x.grad() - 373.76) < 10e-8f64);
+    assert!(f64::abs(y.grad() - 3686.4) < 10e-8f64);
+    assert!(f64::abs(z.grad() - 6214.4) < 10e-8f64);
 }
 
 #[cfg(test)]
@@ -148,6 +151,34 @@ mod operations {
         let x = Value::new(4f32);
         (&x / &x).backward();
         assert_eq!(x.grad(), 0f32);
+    }
+
+    #[test]
+    fn test_pow() {
+        let x = Value::new(1f32);
+        let y = Value::new(2f32);
+
+        let result = x.pow(&y);
+        result.backward();
+        assert_eq!(x.grad(), 2f32);
+        assert_eq!(y.grad(), 0f32);
+
+        let x = Value::new(2f64);
+        let y = Value::new(3f64);
+        let z = Value::new(0.1f64);
+
+        let a = x.pow(&y);
+        let b = &a + &z;
+        let result = b.pow(&z);
+
+        result.backward();
+        assert!(f64::abs(x.grad() - 0.1826f64) < 1e-3f64);
+        assert!(f64::abs(y.grad() - 0.0844f64) < 1e-3f64);
+        assert!(f64::abs(z.grad() - 2.5938f64) < 1e-3f64);
+
+        let x = Value::new(3f64);
+        x.pow(&x).backward();
+        assert!(f64::abs(x.grad() - 56.6625f64) < 1e-3f64);
     }
 
     #[test]
