@@ -1,4 +1,5 @@
 use crate::Differentiable;
+use crate::if_req_grad;
 use std::cell::Cell;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
@@ -17,6 +18,7 @@ pub struct Value<'a, T: Copy> {
     data: Cell<T>,
     grad: Cell<T>,
     operation: Option<Operation<'a, T>>,
+    pub requires_grad: bool,
 }
 
 impl<'a, T: Differentiable> Value<'a, T> {
@@ -32,6 +34,16 @@ impl<'a, T: Differentiable + Copy> Value<'a, T> {
         Self {
             data: Cell::new(data),
             grad: Cell::new(T::zero_grad()),
+            requires_grad: true,
+            operation: None,
+        }
+    }
+
+    pub fn coeff(data: T) -> Self {
+        Self {
+            data: Cell::new(data),
+            grad: Cell::new(T::zero_grad()),
+            requires_grad: false,
             operation: None,
         }
     }
@@ -45,7 +57,7 @@ impl<'a, T: Differentiable + Copy> Value<'a, T> {
     }
 
     pub fn zero_grad(&self) {
-        self.grad.set(T::zero_grad());
+        self.grad.set(T::zero_grad())
     }
 }
 
@@ -59,40 +71,40 @@ impl<'a, T: Differentiable> Value<'a, T> {
         match &self.operation {
             Some(op) => match op {
                 Operation::Add(v1, v2) => {
-                    v1.grad.set(v1.grad() + T::eye_grad() * grad);
-                    v2.grad.set(v2.grad() + T::eye_grad() * grad);
+                    if_req_grad!(v1, v1.grad.set(v1.grad() + T::eye_grad() * grad));
+                    if_req_grad!(v2, v2.grad.set(v2.grad() + T::eye_grad() * grad));
                     pair_backward(v1, v2)
                 }
                 Operation::Mul(v1, v2) => {
-                    v1.grad.set(v1.grad() + v2.data.get() * grad);
-                    v2.grad.set(v2.grad() + v1.data.get() * grad);
+                    if_req_grad!(v1, v1.grad.set(v1.grad() + v2.data.get() * grad));
+                    if_req_grad!(v2, v2.grad.set(v2.grad() + v1.data.get() * grad));
                     pair_backward(v1, v2)
                 }
                 Operation::Sub(v1, v2) => {
-                    v1.grad.set(v1.grad() + T::eye_grad() * grad);
-                    v2.grad.set(v2.grad() - T::eye_grad() * grad);
+                    if_req_grad!(v1, v1.grad.set(v1.grad() + T::eye_grad() * grad));
+                    if_req_grad!(v2, v2.grad.set(v2.grad() - T::eye_grad() * grad));
                     pair_backward(v1, v2)
                 }
                 Operation::Div(v1, v2) => {
                     let d2 = v2.data.get();
-                    v1.grad.set(v1.grad() + T::eye_grad() / d2 * grad);
-                    v2.grad.set(v2.grad() - v1.data.get() / (d2 * d2) * grad);
+                    if_req_grad!(v1, v1.grad.set(v1.grad() + T::eye_grad() / d2 * grad));
+                    if_req_grad!(v2, v2.grad.set(v2.grad() - v1.data.get() / (d2 * d2) * grad));
                     pair_backward(v1, v2)
                 }
                 Operation::Neg(v) => {
-                    v.grad.set(v.grad() - T::eye_grad() * grad);
+                   if_req_grad!(v, v.grad.set(v.grad() - T::eye_grad() * grad));
                     v._backward(v.grad());
                 }
                 Operation::Pow(v1, v2) => {
-                    v1.grad.set(
+                    if_req_grad!(v1, v1.grad.set(
                         v1.grad()
                             + v2.data.get()
                                 * v1.data.get().pow(v2.data.get() - T::eye_grad())
                                 * grad,
-                    );
-                    v2.grad.set(
+                    ));
+                    if_req_grad!(v2, v2.grad.set(
                         v2.grad() + v1.data.get().pow(v2.data.get()) * v1.data.get().log() * grad,
-                    );
+                    ));
                     pair_backward(v1, v2)
                 }
             },

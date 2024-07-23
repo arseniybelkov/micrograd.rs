@@ -1,4 +1,5 @@
 mod differentiable;
+mod utils;
 mod value;
 
 pub use crate::differentiable::{Differentiable, Float};

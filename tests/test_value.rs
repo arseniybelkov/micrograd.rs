@@ -42,6 +42,17 @@ fn test_deep() {
     assert!(f64::abs(z.grad() - 6214.4) < 10e-8f64);
 }
 
+#[test]
+fn test_coeff() {
+    let x = Value::coeff(2f32);
+    let y = Value::coeff(3f32);
+
+    (&x + &y).backward();
+
+    assert_eq!(x.grad(), 0f32);
+    assert_eq!(x.grad(), 0f32);
+}
+
 #[cfg(test)]
 mod operations {
     use super::{assert_eq, Value};
