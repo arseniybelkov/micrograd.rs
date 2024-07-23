@@ -1,4 +1,8 @@
 # micrograd.rs
+> _Quit your shitty ass job and go learn some skills._  
+> 
+> _-_ George Hotz
+
 Insanely lightweight Rust implementation of Andrej Karpathy's [micrograd](https://github.com/karpathy/micrograd). 
 ## Example 
 ```rust
