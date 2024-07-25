@@ -1,20 +1,48 @@
 use crate::Differentiable;
-use crate::if_req_grad;
+use crate::unwrap_operands;
 use std::cell::Cell;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
-#[derive(Clone)]
-enum Operation<'a, T: Copy> {
-    Add(&'a Value<'a, T>, &'a Value<'a, T>),
-    Sub(&'a Value<'a, T>, &'a Value<'a, T>),
-    Mul(&'a Value<'a, T>, &'a Value<'a, T>),
-    Div(&'a Value<'a, T>, &'a Value<'a, T>),
-    Pow(&'a Value<'a, T>, &'a Value<'a, T>),
-    Neg(&'a Value<'a, T>),
+enum Operation<'a, T: Differentiable> {
+    Add(Operand<'a, T>, Operand<'a, T>),
+    Sub(Operand<'a, T>, Operand<'a, T>),
+    Mul(Operand<'a, T>, Operand<'a, T>),
+    Div(Operand<'a, T>, Operand<'a, T>),
+    Pow(Operand<'a, T>, Operand<'a, T>),
+    Neg(Operand<'a, T>),
 }
 
-#[derive(Clone)]
-pub struct Value<'a, T: Copy> {
+enum Operand<'a, T: Differentiable> {
+    Ref(&'a Value<'a, T>),
+    Const(ValueConst<T>),
+}
+
+impl<'a, T: Differentiable> Operand<'a, T> {
+    fn data(&self) -> T {
+        match self {
+            Operand::Ref(v) => v.data(),
+            Operand::Const(v) => v.data(),
+        }
+    }
+}
+
+struct ValueConst<T: Differentiable> {
+    data: T,
+}
+
+impl<T: Differentiable> ValueConst<T> {
+    fn data(&self) -> T {
+        self.data
+    }
+}
+
+impl<'a, T: Differentiable> From<Value<'a, T>> for ValueConst<T> {
+    fn from(value: Value<'a, T>) -> Self {
+        ValueConst { data: value.data() }
+    }
+}
+
+pub struct Value<'a, T: Differentiable> {
     data: Cell<T>,
     grad: Cell<T>,
     operation: Option<Operation<'a, T>>,
@@ -23,13 +51,13 @@ pub struct Value<'a, T: Copy> {
 
 impl<'a, T: Differentiable> Value<'a, T> {
     pub fn pow(&'a self, n: &'a Value<'a, T>) -> Value<'a, T> {
-        let mut value = Self::new(self.data.get().pow(n.data.get()));
-        value.operation = Some(Operation::Pow(self, n));
+        let mut value = Self::new(self.data().pow(n.data.get()));
+        value.operation = Some(Operation::Pow(Operand::Ref(self), Operand::Ref(n)));
         value
     }
 }
 
-impl<'a, T: Differentiable + Copy> Value<'a, T> {
+impl<'a, T: Differentiable> Value<'a, T> {
     pub fn new(data: T) -> Self {
         Self {
             data: Cell::new(data),
@@ -71,41 +99,54 @@ impl<'a, T: Differentiable> Value<'a, T> {
         match &self.operation {
             Some(op) => match op {
                 Operation::Add(v1, v2) => {
-                    if_req_grad!(v1, v1.grad.set(v1.grad() + T::eye_grad() * grad));
-                    if_req_grad!(v2, v2.grad.set(v2.grad() + T::eye_grad() * grad));
-                    pair_backward(v1, v2)
+                    unwrap_operands!(
+                        v1,
+                        v1.grad.set(v1.grad() + T::eye_grad() * grad),
+                        v2,
+                        v2.grad.set(v2.grad() + T::eye_grad() * grad)
+                    );
                 }
                 Operation::Mul(v1, v2) => {
-                    if_req_grad!(v1, v1.grad.set(v1.grad() + v2.data.get() * grad));
-                    if_req_grad!(v2, v2.grad.set(v2.grad() + v1.data.get() * grad));
-                    pair_backward(v1, v2)
+                    unwrap_operands!(
+                        v1,
+                        v1.grad.set(v1.grad() + v2.data() * grad),
+                        v2,
+                        v2.grad.set(v2.grad() + v1.data() * grad)
+                    );
                 }
                 Operation::Sub(v1, v2) => {
-                    if_req_grad!(v1, v1.grad.set(v1.grad() + T::eye_grad() * grad));
-                    if_req_grad!(v2, v2.grad.set(v2.grad() - T::eye_grad() * grad));
-                    pair_backward(v1, v2)
+                    unwrap_operands!(
+                        v1,
+                        v1.grad.set(v1.grad() + T::eye_grad() * grad),
+                        v2,
+                        v2.grad.set(v2.grad() - T::eye_grad() * grad)
+                    );
                 }
                 Operation::Div(v1, v2) => {
-                    let d2 = v2.data.get();
-                    if_req_grad!(v1, v1.grad.set(v1.grad() + T::eye_grad() / d2 * grad));
-                    if_req_grad!(v2, v2.grad.set(v2.grad() - v1.data.get() / (d2 * d2) * grad));
-                    pair_backward(v1, v2)
+                    unwrap_operands!(
+                        v1,
+                        v1.grad.set(v1.grad() + T::eye_grad() / v2.data() * grad),
+                        v2,
+                        v2.grad
+                            .set(v2.grad() - v1.data() / (v2.data() * v2.data()) * grad)
+                    );
                 }
                 Operation::Neg(v) => {
-                   if_req_grad!(v, v.grad.set(v.grad() - T::eye_grad() * grad));
-                    v._backward(v.grad());
+                    if let Operand::Ref(v) = v {
+                        v.grad.set(v.grad() - T::eye_grad() * grad);
+                        v._backward(v.grad());
+                    }
                 }
                 Operation::Pow(v1, v2) => {
-                    if_req_grad!(v1, v1.grad.set(
-                        v1.grad()
-                            + v2.data.get()
-                                * v1.data.get().pow(v2.data.get() - T::eye_grad())
-                                * grad,
-                    ));
-                    if_req_grad!(v2, v2.grad.set(
-                        v2.grad() + v1.data.get().pow(v2.data.get()) * v1.data.get().log() * grad,
-                    ));
-                    pair_backward(v1, v2)
+                    unwrap_operands!(
+                        v1,
+                        v1.grad.set(
+                            v1.grad() + v2.data() * v1.data().pow(v2.data() - T::eye_grad()) * grad
+                        ),
+                        v2,
+                        v2.grad
+                            .set(v2.grad() + v1.data().pow(v2.data()) * v1.data().log() * grad)
+                    );
                 }
             },
             None => {
@@ -122,14 +163,40 @@ fn pair_backward<'a, T: Differentiable>(v1: &'a Value<T>, v2: &'a Value<T>) {
     }
 }
 
+// TODO: stuff it all into macros
+
 impl<'a, T> Add<&'a Value<'a, T>> for &'a Value<'a, T>
 where
     T: Differentiable,
 {
     type Output = Value<'a, T>;
     fn add(self, rhs: &'a Value<'a, T>) -> Self::Output {
-        let mut value = Value::new(self.data.get() + rhs.data.get());
-        value.operation = Some(Operation::Add(self, rhs));
+        let mut value = Value::new(self.data() + rhs.data());
+        value.operation = Some(Operation::Add(Operand::Ref(self), Operand::Ref(rhs)));
+        value
+    }
+}
+
+impl<'a, T> Add<&'a Value<'a, T>> for Value<'a, T>
+where
+    T: Differentiable
+{
+    type Output = Value<'a, T>;
+    fn add(self, rhs: &'a Value<'a, T>) -> Self::Output {
+        let mut value = Value::new(self.data() + rhs.data());
+        value.operation = Some(Operation::Add(Operand::Const(self.into()), Operand::Ref(rhs)));
+        value
+    }
+}
+
+impl<'a, T> Add<Value<'a, T>> for &'a Value<'a, T>
+where
+    T: Differentiable
+{
+    type Output = Value<'a, T>;
+    fn add(self, rhs: Value<'a, T>) -> Self::Output {
+        let mut value = Value::new(self.data() + rhs.data());
+        value.operation = Some(Operation::Add(Operand::Ref(self), Operand::Const(rhs.into())));
         value
     }
 }
@@ -140,8 +207,32 @@ where
 {
     type Output = Value<'a, T>;
     fn sub(self, rhs: &'a Value<'a, T>) -> Self::Output {
-        let mut value = Value::new(self.data.get() - rhs.data.get());
-        value.operation = Some(Operation::Sub(self, rhs));
+        let mut value = Value::new(self.data() - rhs.data());
+        value.operation = Some(Operation::Sub(Operand::Ref(self), Operand::Ref(rhs)));
+        value
+    }
+}
+
+impl<'a, T> Sub<&'a Value<'a, T>> for Value<'a, T>
+where
+    T: Differentiable,
+{
+    type Output = Value<'a, T>;
+    fn sub(self, rhs: &'a Value<'a, T>) -> Self::Output {
+        let mut value = Value::new(self.data() - rhs.data());
+        value.operation = Some(Operation::Sub(Operand::Const(self.into()), Operand::Ref(rhs)));
+        value
+    }
+}
+
+impl<'a, T> Sub<Value<'a, T>> for &'a Value<'a, T>
+where
+    T: Differentiable,
+{
+    type Output = Value<'a, T>;
+    fn sub(self, rhs: Value<'a, T>) -> Self::Output {
+        let mut value = Value::new(self.data() - rhs.data());
+        value.operation = Some(Operation::Sub(Operand::Ref(self), Operand::Const(rhs.into())));
         value
     }
 }
@@ -152,8 +243,32 @@ where
 {
     type Output = Value<'a, T>;
     fn mul(self, rhs: &'a Value<'a, T>) -> Self::Output {
-        let mut value = Value::new(self.data.get() * rhs.data.get());
-        value.operation = Some(Operation::Mul(self, rhs));
+        let mut value = Value::new(self.data() * rhs.data());
+        value.operation = Some(Operation::Mul(Operand::Ref(self), Operand::Ref(rhs)));
+        value
+    }
+}
+
+impl<'a, T> Mul<&'a Value<'a, T>> for Value<'a, T>
+where
+    T: Differentiable,
+{
+    type Output = Value<'a, T>;
+    fn mul(self, rhs: &'a Value<'a, T>) -> Self::Output {
+        let mut value = Value::new(self.data() * rhs.data());
+        value.operation = Some(Operation::Mul(Operand::Const(self.into()), Operand::Ref(rhs)));
+        value
+    }
+}
+
+impl<'a, T> Mul<Value<'a, T>> for &'a Value<'a, T>
+where
+    T: Differentiable,
+{
+    type Output = Value<'a, T>;
+    fn mul(self, rhs: Value<'a, T>) -> Self::Output {
+        let mut value = Value::new(self.data() * rhs.data());
+        value.operation = Some(Operation::Mul(Operand::Ref(self), Operand::Const(rhs.into())));
         value
     }
 }
@@ -164,8 +279,32 @@ where
 {
     type Output = Value<'a, T>;
     fn div(self, rhs: &'a Value<'a, T>) -> Self::Output {
-        let mut value = Value::new(self.data.get() / rhs.data.get());
-        value.operation = Some(Operation::Div(self, rhs));
+        let mut value = Value::new(self.data() / rhs.data());
+        value.operation = Some(Operation::Div(Operand::Ref(self), Operand::Ref(rhs)));
+        value
+    }
+}
+
+impl<'a, T> Div<&'a Value<'a, T>> for Value<'a, T>
+where
+    T: Differentiable,
+{
+    type Output = Value<'a, T>;
+    fn div(self, rhs: &'a Value<'a, T>) -> Self::Output {
+        let mut value = Value::new(self.data() / rhs.data());
+        value.operation = Some(Operation::Div(Operand::Const(self.into()), Operand::Ref(rhs)));
+        value
+    }
+}
+
+impl<'a, T> Div<Value<'a, T>> for &'a Value<'a, T>
+where
+    T: Differentiable,
+{
+    type Output = Value<'a, T>;
+    fn div(self, rhs: Value<'a, T>) -> Self::Output {
+        let mut value = Value::new(self.data() / rhs.data());
+        value.operation = Some(Operation::Div(Operand::Ref(self), Operand::Const(rhs.into())));
         value
     }
 }
@@ -176,8 +315,20 @@ where
 {
     type Output = Value<'a, T>;
     fn neg(self) -> Self::Output {
-        let mut value = Value::new(-self.data.get());
-        value.operation = Some(Operation::Neg(self));
+        let mut value = Value::new(-self.data());
+        value.operation = Some(Operation::Neg(Operand::Ref(self)));
+        value
+    }
+}
+
+impl<'a, T> Neg for Value<'a, T>
+where
+    T: Differentiable,
+{
+    type Output = Value<'a, T>;
+    fn neg(self) -> Self::Output {
+        let mut value = Value::new(-self.data());
+        value.operation = Some(Operation::Neg(Operand::Const(self.into())));
         value
     }
 }
