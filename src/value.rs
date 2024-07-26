@@ -12,48 +12,10 @@ enum Operation<'a, T: Differentiable> {
     Neg(Operand<'a, T>),
 }
 
-pub(crate) enum Operand<'a, T: Differentiable> {
-    Ref(&'a Value<'a, T>),
-    Const(ValueConst<T>),
-}
-
-impl<'a, T: Differentiable> Operand<'a, T> {
-    fn data(&self) -> T {
-        match self {
-            Operand::Ref(v) => v.data(),
-            Operand::Const(v) => v.data(),
-        }
-    }
-
-    fn set_grad(&self, value: T) {
-        if let Self::Ref(s) = self {
-            if let Some(ref grad) = s.grad {
-                grad.set(s.grad().unwrap() + value);
-            }
-        }
-    }
-}
-
-pub(crate) struct ValueConst<T: Differentiable> {
-    data: T,
-}
-
-impl<T: Differentiable> ValueConst<T> {
-    fn data(&self) -> T {
-        self.data
-    }
-}
-
-impl<'a, T: Differentiable> From<Value<'a, T>> for ValueConst<T> {
-    fn from(value: Value<'a, T>) -> Self {
-        ValueConst { data: value.data() }
-    }
-}
-
 pub struct Value<'a, T: Differentiable> {
     data: Cell<T>,
-    grad: Option<Cell<T>>,
-    operation: Option<Operation<'a, T>>,
+    pub(crate) grad: Option<Cell<T>>,
+    // operation: Option<Operation<'a, T>>,
 }
 
 impl<'a, T: Differentiable> Value<'a, T> {
