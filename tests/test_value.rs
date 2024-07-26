@@ -7,7 +7,7 @@ fn test_simple() {
     let x = Value::new(3f32);
     let result = &value + &x;
     result.backward();
-    assert_eq!(value.grad(), 1f32);
+    assert_eq!(value.grad().unwrap(), 1f32);
 
     let w1 = Value::new(5f32);
     let w2 = Value::new(4f32);
@@ -17,10 +17,17 @@ fn test_simple() {
     let result = &w * &w3;
     result.backward();
 
-    assert_eq!(w1.grad(), 3f32);
-    assert_eq!(w2.grad(), 3f32);
-    assert_eq!(w3.grad(), 9f32);
+    assert_eq!(w1.grad().unwrap(), 3f32);
+    assert_eq!(w2.grad().unwrap(), 3f32);
+    assert_eq!(w3.grad().unwrap(), 9f32);
 }
+
+// #[test]
+// fn test_sigmoid() {
+//     fn sigmoid<'a>(x: &'a Value<'a, f32>) -> Value<'a, f32> {
+//         Value::coeff(1f32) / (Value::coeff(1f32))
+//     }
+// }
 
 #[test]
 fn test_deep() {
@@ -37,20 +44,9 @@ fn test_deep() {
     let result = &f / &x;
 
     result.backward();
-    assert!(f64::abs(x.grad() - 373.76) < 10e-8f64);
-    assert!(f64::abs(y.grad() - 3686.4) < 10e-8f64);
-    assert!(f64::abs(z.grad() - 6214.4) < 10e-8f64);
-}
-
-#[test]
-fn test_coeff() {
-    let x = Value::coeff(2f32);
-    let y = Value::coeff(3f32);
-
-    (&x + &y).backward();
-
-    assert_eq!(x.grad(), 0f32);
-    assert_eq!(x.grad(), 0f32);
+    assert!(f64::abs(x.grad().unwrap() - 373.76) < 10e-8f64);
+    assert!(f64::abs(y.grad().unwrap() - 3686.4) < 10e-8f64);
+    assert!(f64::abs(z.grad().unwrap() - 6214.4) < 10e-8f64);
 }
 
 #[cfg(test)]
@@ -62,14 +58,14 @@ mod operations {
         let x = Value::new(1f32);
         let y = Value::new(2f32);
         (&x + &y).backward();
-        assert_eq!(x.grad(), 1f32);
-        assert_eq!(y.grad(), 1f32);
+        assert_eq!(x.grad().unwrap(), 1f32);
+        assert_eq!(y.grad().unwrap(), 1f32);
 
         let z = Value::new(5f32);
         (&x + &z).backward();
-        assert_eq!(x.grad(), 2f32);
-        assert_eq!(y.grad(), 1f32);
-        assert_eq!(z.grad(), 1f32);
+        assert_eq!(x.grad().unwrap(), 2f32);
+        assert_eq!(y.grad().unwrap(), 1f32);
+        assert_eq!(z.grad().unwrap(), 1f32);
 
         x.zero_grad();
         y.zero_grad();
@@ -77,11 +73,11 @@ mod operations {
         let z = &x + &y;
         (&z + &x).backward();
 
-        assert_eq!(x.grad(), 2f32);
+        assert_eq!(x.grad().unwrap(), 2f32);
 
         let x = Value::new(3f32);
         (&x + &x).backward();
-        assert_eq!(x.grad(), 2f32);
+        assert_eq!(x.grad().unwrap(), 2f32);
     }
 
     #[test]
@@ -89,14 +85,14 @@ mod operations {
         let x = Value::new(1f32);
         let y = Value::new(2f32);
         (&x - &y).backward();
-        assert_eq!(x.grad(), 1f32);
-        assert_eq!(y.grad(), -1f32);
+        assert_eq!(x.grad().unwrap(), 1f32);
+        assert_eq!(y.grad().unwrap(), -1f32);
 
         let z = Value::new(5f32);
         (&x - &z).backward();
-        assert_eq!(x.grad(), 2f32);
-        assert_eq!(y.grad(), -1f32);
-        assert_eq!(z.grad(), -1f32);
+        assert_eq!(x.grad().unwrap(), 2f32);
+        assert_eq!(y.grad().unwrap(), -1f32);
+        assert_eq!(z.grad().unwrap(), -1f32);
 
         x.zero_grad();
         y.zero_grad();
@@ -105,7 +101,7 @@ mod operations {
         let z = &x - &y;
         (&z - &x).backward();
 
-        assert_eq!(x.grad(), 0f32);
+        assert_eq!(x.grad().unwrap(), 0f32);
     }
 
     #[test]
@@ -113,14 +109,14 @@ mod operations {
         let x = Value::new(1f32);
         let y = Value::new(2f32);
         (&x * &y).backward();
-        assert_eq!(x.grad(), 2f32);
-        assert_eq!(y.grad(), 1f32);
+        assert_eq!(x.grad().unwrap(), 2f32);
+        assert_eq!(y.grad().unwrap(), 1f32);
 
         let z = Value::new(5f32);
         (&x * &z).backward();
-        assert_eq!(x.grad(), 7f32);
-        assert_eq!(y.grad(), 1f32);
-        assert_eq!(z.grad(), 1f32);
+        assert_eq!(x.grad().unwrap(), 7f32);
+        assert_eq!(y.grad().unwrap(), 1f32);
+        assert_eq!(z.grad().unwrap(), 1f32);
 
         x.zero_grad();
         y.zero_grad();
@@ -129,11 +125,11 @@ mod operations {
         let z = &x * &y;
         (&z * &x).backward();
 
-        assert_eq!(x.grad(), 52f32);
+        assert_eq!(x.grad().unwrap(), 52f32);
 
         let x = Value::new(4f32);
         (&x * &x).backward();
-        assert_eq!(x.grad(), 8f32);
+        assert_eq!(x.grad().unwrap(), 8f32);
     }
 
     #[test]
@@ -141,14 +137,14 @@ mod operations {
         let x = Value::new(3f32);
         let y = Value::new(2f32);
         (&x / &y).backward();
-        assert_eq!(x.grad(), 0.5);
-        assert_eq!(y.grad(), -0.75);
+        assert_eq!(x.grad().unwrap(), 0.5);
+        assert_eq!(y.grad().unwrap(), -0.75);
 
         let z = Value::new(5f32);
         (&x / &z).backward();
-        assert_eq!(x.grad(), 0.7);
-        assert_eq!(y.grad(), -0.75);
-        assert_eq!(z.grad(), -0.12);
+        assert_eq!(x.grad().unwrap(), 0.7);
+        assert_eq!(y.grad().unwrap(), -0.75);
+        assert_eq!(z.grad().unwrap(), -0.12);
 
         x.zero_grad();
         y.zero_grad();
@@ -157,11 +153,11 @@ mod operations {
         let z = &x / &y;
         (&z / &x).backward();
 
-        assert_eq!(x.grad(), 0f32);
+        assert_eq!(x.grad().unwrap(), 0f32);
 
         let x = Value::new(4f32);
         (&x / &x).backward();
-        assert_eq!(x.grad(), 0f32);
+        assert_eq!(x.grad().unwrap(), 0f32);
     }
 
     #[test]
@@ -171,8 +167,8 @@ mod operations {
 
         let result = x.pow(&y);
         result.backward();
-        assert_eq!(x.grad(), 2f32);
-        assert_eq!(y.grad(), 0f32);
+        assert_eq!(x.grad().unwrap(), 2f32);
+        assert_eq!(y.grad().unwrap(), 0f32);
 
         let x = Value::new(2f64);
         let y = Value::new(3f64);
@@ -183,13 +179,13 @@ mod operations {
         let result = b.pow(&z);
 
         result.backward();
-        assert!(f64::abs(x.grad() - 0.1826f64) < 1e-3f64);
-        assert!(f64::abs(y.grad() - 0.0844f64) < 1e-3f64);
-        assert!(f64::abs(z.grad() - 2.5938f64) < 1e-3f64);
+        assert!(f64::abs(x.grad().unwrap() - 0.1826f64) < 1e-3f64);
+        assert!(f64::abs(y.grad().unwrap() - 0.0844f64) < 1e-3f64);
+        assert!(f64::abs(z.grad().unwrap() - 2.5938f64) < 1e-3f64);
 
         let x = Value::new(3f64);
         x.pow(&x).backward();
-        assert!(f64::abs(x.grad() - 56.6625f64) < 1e-3f64);
+        assert!(f64::abs(x.grad().unwrap() - 56.6625f64) < 1e-3f64);
     }
 
     #[test]
@@ -197,6 +193,6 @@ mod operations {
         let x = Value::new(123f32);
         let y = -&x;
         y.backward();
-        assert_eq!(x.grad(), -1f32);
+        assert_eq!(x.grad().unwrap(), -1f32);
     }
 }

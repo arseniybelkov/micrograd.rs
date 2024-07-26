@@ -1,33 +1,35 @@
 #[macro_export]
-macro_rules! if_req_grad {
-    ($ident:ident, $expr:expr) => {
-        if $ident.requires_grad {
-            $expr;
+macro_rules! backward {
+    ($v1:ident) => {
+        if let Operand::Ref(ref v) = $v1 {
+            if let Some(g) = v.grad() {
+                v._backward(g);
+            }
         }
     };
-}
-
-#[macro_export]
-macro_rules! unwrap_operands {
-    ($v1:ident, $update1:stmt, $v2:ident, $update2:stmt) => {
+    ($v1:ident, $v2:ident) => {
         match ($v1, $v2) {
             (Operand::Ref(v1), Operand::Ref(v2)) => {
-                $update1
-                v1._backward(v1.grad());
-                $update2
-                if !std::ptr::eq(v1, v2) {
-                    v2._backward(v2.grad());
+                if let Some(g) = v1.grad() {
+                    v1._backward(g);
+                };
+                if let Some(g) = v2.grad() {
+                    if !std::ptr::eq(*v1, *v2) {
+                        v2._backward(g);
+                    }
                 }
             }
-            (Operand::Ref(v1), Operand::Const(v2)) => {
-                $update1
-                v1._backward(v1.grad());
+            (Operand::Ref(v), Operand::Const(_)) => {
+                if let Some(g) = v.grad() {
+                    v._backward(g);
+                };
             }
-            (Operand::Const(v1), Operand::Ref(v2)) => {
-                $update2
-                v2._backward(v2.grad());
+            (Operand::Const(_), Operand::Ref(v)) => {
+                if let Some(g) = v.grad() {
+                    v._backward(g);
+                };
             }
-            (Operand::Const(v1), Operand::Const(v2)) => return,
+            (Operand::Const(_), Operand::Const(_)) => {}
         }
     };
 }
