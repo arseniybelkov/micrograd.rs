@@ -1,21 +1,12 @@
-use crate::backward;
 use crate::Differentiable;
 use std::cell::Cell;
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::ops;
+use crate::operations::{Operation, Operand};
 
 pub struct Value<'a, T: Differentiable> {
     data: Cell<T>,
-    pub(crate) grad: Option<Cell<T>>,
-    // operation: Option<Operation<'a, T>>,
-    _marker: std::marker::PhantomData<&'a T>,
-}
-
-impl<'a, T: Differentiable> Value<'a, T> {
-    pub fn pow(&'a self, n: &'a Value<'a, T>) -> Value<'a, T> {
-        let mut value = Self::new(self.data().pow(n.data.get()));
-        value.operation = Some(Operation::Pow(Operand::Ref(self), Operand::Ref(n)));
-        value
-    }
+    grad: Option<Cell<T>>,
+    pub(super) operation: Cell<Option<Box<dyn Operation<'a, T> + 'a>>>,
 }
 
 impl<'a, T: Differentiable> Value<'a, T> {
@@ -23,7 +14,7 @@ impl<'a, T: Differentiable> Value<'a, T> {
         Self {
             data: Cell::new(data),
             grad: Some(Cell::new(T::zero_grad())),
-            operation: None,
+            operation: Cell::new(None),
         }
     }
 
@@ -31,7 +22,7 @@ impl<'a, T: Differentiable> Value<'a, T> {
         Self {
             data: Cell::new(data),
             grad: None,
-            operation: None,
+            operation: Cell::new(None),
         }
     }
 
@@ -44,8 +35,12 @@ impl<'a, T: Differentiable> Value<'a, T> {
     }
 
     pub fn zero_grad(&self) {
+        self.set_grad(T::zero_grad())
+    }
+
+    pub(crate) fn set_grad(&self, grad: T) {
         if let Some(ref g) = self.grad {
-            g.set(T::zero_grad())
+            g.set(grad);
         }
     }
 
@@ -65,41 +60,19 @@ impl<'a, T: Differentiable> Value<'a, T> {
     }
 
     fn _backward(&self, grad: T) {
-        match &self.operation {
-            Some(op) => match op {
-                Operation::Add(v1, v2) => {
-                    v1.set_grad(T::eye_grad() * grad);
-                    v2.set_grad(T::eye_grad() * grad);
-                    backward!(v1, v2);
-                }
-                Operation::Mul(v1, v2) => {
-                    v1.set_grad(v2.data() * grad);
-                    v2.set_grad(v1.data() * grad);
-                    backward!(v1, v2);
-                }
-                Operation::Sub(v1, v2) => {
-                    v1.set_grad(T::eye_grad() * grad);
-                    v2.set_grad(-T::eye_grad() * grad);
-                    backward!(v1, v2);
-                }
-                Operation::Div(v1, v2) => {
-                    v1.set_grad(T::eye_grad() / v2.data() * grad);
-                    v2.set_grad(-v1.data() / (v2.data() * v2.data()) * grad);
-                    backward!(v1, v2);
-                }
-                Operation::Neg(v) => {
-                    v.set_grad(-T::eye_grad() * grad);
-                    backward!(v);
-                }
-                Operation::Pow(v1, v2) => {
-                    v1.set_grad(v2.data() * v1.data().pow(v2.data() - T::eye_grad()) * grad);
-                    v2.set_grad(v1.data().pow(v2.data()) * v1.data().log() * grad);
-                    backward!(v1, v2);
-                }
-            },
-            None => {
-                // end of graph
-            }
+        let Some(operation) = self.operation.take() else {return};
+        let (lhs, rhs) = operation.operands();
+        let (g1, g2) = operation.backward(grad);
+        if std::ptr::eq(lhs, rhs) {
+            let value = lhs.value();
+            value.set_grad(value.grad().unwrap() + g1);
+            value._backward(value.grad().unwrap());
+        } else {
+            let (lhs, rhs) = (lhs.value(), rhs.value());
+            lhs.set_grad(lhs.grad().unwrap() + g1);
+            rhs.set_grad(rhs.grad().unwrap() + g2);
+            lhs._backward(lhs.grad().unwrap());
+            rhs._backward(rhs.grad().unwrap());
         }
     }
 }

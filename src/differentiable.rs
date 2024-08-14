@@ -8,7 +8,7 @@ pub trait Differentiable:
     + Mul<Output = Self>
     + Div<Output = Self>
     + Neg<Output = Self>
-    + Sized
+    + Sized + 'static
 {
     fn zero_grad() -> Self;
     fn eye_grad() -> Self;
