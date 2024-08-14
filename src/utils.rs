@@ -1,35 +1,32 @@
 #[macro_export]
-macro_rules! backward {
-    ($v1:ident) => {
-        if let Operand::Ref(ref v) = $v1 {
-            if let Some(g) = v.grad() {
-                v._backward(g);
+macro_rules! impl_binary_operation {
+    ($op:ident, $trt_value:ty, $trt_ref:ty, $method:ident) => {
+        impl<'a, T: Differentiable> $trt_value for Value<'a, T> {
+            type Output = Value<'a, T>;
+            fn $method(self, rhs: Value<'a, T>) -> Self::Output {
+                $op(Operand::Value(self), Operand::Value(rhs)).forward()
             }
         }
-    };
-    ($v1:ident, $v2:ident) => {
-        match ($v1, $v2) {
-            (Operand::Ref(v1), Operand::Ref(v2)) => {
-                if let Some(g) = v1.grad() {
-                    v1._backward(g);
-                };
-                if let Some(g) = v2.grad() {
-                    if !std::ptr::eq(*v1, *v2) {
-                        v2._backward(g);
-                    }
-                }
+
+        impl<'a, T: Differentiable> $trt_ref for Value<'a, T> {
+            type Output = Value<'a, T>;
+            fn $method(self, rhs: &'a Value<'a, T>) -> Self::Output {
+                $op(Operand::Value(self), Operand::Ref(rhs)).forward()
             }
-            (Operand::Ref(v), Operand::Const(_)) => {
-                if let Some(g) = v.grad() {
-                    v._backward(g);
-                };
+        }
+
+        impl<'a, T: Differentiable> $trt_value for &'a Value<'a, T> {
+            type Output = Value<'a, T>;
+            fn $method(self, rhs: Value<'a, T>) -> Self::Output {
+                $op(Operand::Ref(self), Operand::Value(rhs)).forward()
             }
-            (Operand::Const(_), Operand::Ref(v)) => {
-                if let Some(g) = v.grad() {
-                    v._backward(g);
-                };
+        }
+
+        impl<'a, T: Differentiable> $trt_ref for &'a Value<'a, T> {
+            type Output = Value<'a, T>;
+            fn $method(self, rhs: &'a Value<'a, T>) -> Self::Output {
+                $op(Operand::Ref(self), Operand::Ref(rhs)).forward()
             }
-            (Operand::Const(_), Operand::Const(_)) => {}
         }
     };
 }

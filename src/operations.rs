@@ -1,5 +1,6 @@
+use crate::impl_binary_operation;
 use crate::{Differentiable, Value};
-use std::{ops, cell::Cell};
+use std::{cell::Cell, ops};
 
 pub trait Operation<'a, T: Differentiable> {
     fn forward(self) -> Value<'a, T>;
@@ -47,38 +48,72 @@ impl<'a, T: Differentiable> Operation<'a, T> for Add<'a, T> {
     }
 }
 
-impl<'a, T: Differentiable> ops::Add<Value<'a, T>> for Value<'a, T> {
-    type Output = Self;
-    fn add(self, rhs: Value<'a, T>) -> Self::Output {
-        Add(Operand::Value(self), Operand::Value(rhs)).forward()
+struct Sub<'a, T: Differentiable>(Operand<'a, T>, Operand<'a, T>);
+
+impl<'a, T: Differentiable> Operation<'a, T> for Sub<'a, T> {
+    fn forward(self) -> Value<'a, T> {
+        let (lhs, rhs) = (&self.0, &self.1);
+        let mut value = Value::new(lhs.data() - rhs.data());
+        value.operation = Cell::new(Some(Box::new(self)));
+        value
+    }
+
+    fn backward(&self, grad: T) -> (T, T) {
+        (grad * T::eye_grad(), -grad * T::eye_grad())
+    }
+
+    fn operands(&self) -> (&Operand<'a, T>, &Operand<'a, T>) {
+        (&self.0, &self.1)
     }
 }
 
-impl<'a, T: Differentiable> ops::Add<Value<'a, T>> for &'a Value<'a, T> {
-    type Output = Value<'a, T>;
-    fn add(self, rhs: Value<'a, T>) -> Self::Output {
-        Add(Operand::Ref(self), Operand::Value(rhs)).forward()
+struct Mul<'a, T: Differentiable>(Operand<'a, T>, Operand<'a, T>);
+
+impl<'a, T: Differentiable> Operation<'a, T> for Mul<'a, T> {
+    fn forward(self) -> Value<'a, T> {
+        let (lhs, rhs) = (&self.0, &self.1);
+        let mut value = Value::new(lhs.data() * rhs.data());
+        value.operation = Cell::new(Some(Box::new(self)));
+        value
+    }
+
+    fn backward(&self, grad: T) -> (T, T) {
+        let (lhs, rhs) = self.operands();
+        (grad * rhs.data(), grad * lhs.data())
+    }
+
+    fn operands(&self) -> (&Operand<'a, T>, &Operand<'a, T>) {
+        (&self.0, &self.1)
     }
 }
 
-impl<'a, T: Differentiable> ops::Add<&'a Value<'a, T>> for Value<'a, T> {
-    type Output = Value<'a, T>;
-    fn add(self, rhs: &'a Value<'a, T>) -> Self::Output {
-        Add(Operand::Value(self), Operand::Ref(rhs)).forward()
+struct Div<'a, T: Differentiable>(Operand<'a, T>, Operand<'a, T>);
+
+impl<'a, T: Differentiable> Operation<'a, T> for Div<'a, T> {
+    fn forward(self) -> Value<'a, T> {
+        let (lhs, rhs) = (&self.0, &self.1);
+        let mut value = Value::new(lhs.data() / rhs.data());
+        value.operation = Cell::new(Some(Box::new(self)));
+        value
+    }
+
+    fn backward(&self, grad: T) -> (T, T) {
+        let (lhs, rhs) = self.operands();
+        (
+            grad / rhs.data(),
+            -grad * lhs.data() / (rhs.data() * rhs.data()),
+        )
+    }
+
+    fn operands(&self) -> (&Operand<'a, T>, &Operand<'a, T>) {
+        (&self.0, &self.1)
     }
 }
 
-impl<'a, T: Differentiable> ops::Add<&'a Value<'a, T>> for &'a Value<'a, T> {
-    type Output = Value<'a, T>;
-    fn add(self, rhs: &'a Value<'a, T>) -> Self::Output {
-        Add(Operand::Ref(self), Operand::Ref(rhs)).forward()
-    }
-}
-
-create_operation! {Add, ops::Add, 1, Value, Value};
-create_operation! {Add, ops::Add, 1, Value, Value};
-create_operation! {Add, ops::Add, 1, Value, Value};
-create_operation! {Add, ops::Add, 1, Value, Value};
+impl_binary_operation! {Add, std::ops::Add<Value<'a, T>>, std::ops::Add<&'a Value<'a, T>>, add}
+impl_binary_operation! {Sub, std::ops::Sub<Value<'a, T>>, std::ops::Sub<&'a Value<'a, T>>, sub}
+impl_binary_operation! {Mul, std::ops::Mul<Value<'a, T>>, std::ops::Mul<&'a Value<'a, T>>, mul}
+impl_binary_operation! {Div, std::ops::Div<Value<'a, T>>, std::ops::Div<&'a Value<'a, T>>, div}
 
 struct Neg<'a, T: Differentiable>(Operand<'a, T>);
 
